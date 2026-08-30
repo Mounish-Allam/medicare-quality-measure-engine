@@ -9,6 +9,8 @@ adherence quality measures against that data: Part D Medication Adherence
 for Diabetes Medications, and the HEDIS SPD (Statin Therapy for Patients
 With Diabetes) measure, both rates.
 
+![Schema diagram](docs/images/schema.svg)
+
 ## Why these measures matter
 
 Part D medication adherence measures are triple-weighted in CMS Star
@@ -35,6 +37,8 @@ From a fresh run of `python build.py` against 500 synthetic members:
 | SPD Rate 1 (Received Statin Therapy) | 106 | 52 | 0.4906 |
 | SPD Rate 2 (Statin Adherence 80%) | 52 | 26 | 0.5000 |
 
+![PDC distribution by measure](docs/images/pdc_distribution.svg)
+
 ## Verification
 
 Nine hand-constructed members with known expected outcomes (clean fills,
@@ -54,8 +58,8 @@ the results match.
 - `condition_group` is a simplified stand-in for real diagnosis codes;
   `drug_reference` is a small illustrative list, not a licensed NCQA
   HEDIS value set (not reproduced here).
-- SPD's hospice exclusion window is read from ambiguous spec wording as "on
-  or before 2025-12-31" -- see the comment in `sql/04_measure_spd.sql`.
+- SPD's hospice exclusion window reads ambiguous spec wording as "on or
+  before 2025-12-31" -- see `sql/04_measure_spd.sql`.
 
 ## Links
 

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="580" height="420" viewBox="0 0 580 420">
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#1E7FA3"/></marker></defs>
+<rect x="0" y="0" width="580" height="420" fill="#FFFFFF"/>
+<line x1="330" y1="300" x2="250" y2="100" stroke="#1E7FA3" stroke-width="1.4" marker-end="url(#arrow)"/>
+<rect x="256.3" y="191.0" width="67.4" height="14" fill="#FFFFFF"/>
+<text x="290.0" y="202.0" font-family="ui-monospace, monospace" font-size="10" fill="#1E7FA3" text-anchor="middle">member_id</text>
+<line x1="440" y1="260" x2="440" y2="130" stroke="#1E7FA3" stroke-width="1.4" marker-end="url(#arrow)"/>
+<rect x="406.3" y="186.0" width="67.4" height="14" fill="#FFFFFF"/>
+<text x="440.0" y="197.0" font-family="ui-monospace, monospace" font-size="10" fill="#1E7FA3" text-anchor="middle">drug_name</text>
+<line x1="135" y1="260" x2="135" y2="200" stroke="#1E7FA3" stroke-width="1.4" marker-end="url(#arrow)"/>
+<rect x="101.3" y="221.0" width="67.4" height="14" fill="#FFFFFF"/>
+<text x="135.0" y="232.0" font-family="ui-monospace, monospace" font-size="10" fill="#1E7FA3" text-anchor="middle">member_id</text>
+<g>
+<rect x="20" y="20" width="230" height="184" fill="#FFFFFF" stroke="#9FB0AE" stroke-width="1.2"/>
+<rect x="20" y="20" width="230" height="30" fill="#1E7FA3"/>
+<text x="32" y="40" font-family="ui-monospace, monospace" font-size="13" font-weight="700" fill="#FFFFFF">members</text>
+<text x="32" y="65" font-family="ui-monospace, monospace" font-size="11.5" font-weight="700" fill="#16232B">member_id PK</text>
+<line x1="20" y1="66" x2="250" y2="66" stroke="#9FB0AE" stroke-width="0.75"/>
+<text x="32" y="87" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">birth_date</text>
+<text x="32" y="109" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">sex</text>
+<text x="32" y="131" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">coverage_start</text>
+<text x="32" y="153" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">coverage_end</text>
+<text x="32" y="175" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">death_date</text>
+<text x="32" y="197" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">plan_id</text>
+</g>
+<g>
+<rect x="330" y="20" width="220" height="74" fill="#FFFFFF" stroke="#9FB0AE" stroke-width="1.2"/>
+<rect x="330" y="20" width="220" height="30" fill="#1E7FA3"/>
+<text x="342" y="40" font-family="ui-monospace, monospace" font-size="13" font-weight="700" fill="#FFFFFF">drug_reference</text>
+<text x="342" y="65" font-family="ui-monospace, monospace" font-size="11.5" font-weight="700" fill="#16232B">drug_name PK</text>
+<line x1="330" y1="66" x2="550" y2="66" stroke="#9FB0AE" stroke-width="0.75"/>
+<text x="342" y="87" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">drug_class</text>
+</g>
+<g>
+<rect x="330" y="260" width="220" height="140" fill="#FFFFFF" stroke="#9FB0AE" stroke-width="1.2"/>
+<rect x="330" y="260" width="220" height="30" fill="#1E7FA3"/>
+<text x="342" y="280" font-family="ui-monospace, monospace" font-size="13" font-weight="700" fill="#FFFFFF">pharmacy_fills</text>
+<text x="342" y="305" font-family="ui-monospace, monospace" font-size="11.5" font-weight="700" fill="#16232B">fill_id PK</text>
+<line x1="330" y1="306" x2="550" y2="306" stroke="#9FB0AE" stroke-width="0.75"/>
+<text x="342" y="327" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">member_id FK</text>
+<text x="342" y="349" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">drug_name FK</text>
+<text x="342" y="371" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">fill_date</text>
+<text x="342" y="393" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">days_supply</text>
+</g>
+<g>
+<rect x="20" y="260" width="230" height="96" fill="#FFFFFF" stroke="#9FB0AE" stroke-width="1.2"/>
+<rect x="20" y="260" width="230" height="30" fill="#1E7FA3"/>
+<text x="32" y="280" font-family="ui-monospace, monospace" font-size="13" font-weight="700" fill="#FFFFFF">conditions</text>
+<text x="32" y="305" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">member_id FK</text>
+<text x="32" y="327" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">condition_group</text>
+<text x="32" y="349" font-family="ui-monospace, monospace" font-size="11.5" fill="#55666D">dx_date</text>
+</g>
+</svg>
