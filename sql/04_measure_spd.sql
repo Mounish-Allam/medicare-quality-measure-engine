@@ -1,36 +1,11 @@
--- Grain: one row per member_id, for every member who is diabetic and
--- otherwise eligible for SPD (Statin Therapy for Patients With Diabetes,
--- NCQA HEDIS). Rate 1 and Rate 2 flags live side by side on the same row;
--- Rate 2's denominator is exactly the members where rate1_numerator = true.
+-- Grain: one row per member_id who is diabetic and otherwise eligible for
+-- SPD (Statin Therapy for Patients With Diabetes, NCQA HEDIS). Rate 2's
+-- denominator is exactly the members where rate1_numerator = true. See
+-- SPEC.md "Measure 2" for the full definition.
 --
--- Age: 40-75 as of the fixed anchor date 2025-12-31 (never the system date).
--- Because 2025-12-31 is the last day of the year, age-as-of-anchor always
--- equals 2025 minus birth year -- every birthday in a given year has already
--- occurred by December 31 of that year, so no month/day comparison is needed.
---
--- Continuous enrollment: enrolled for the measurement year (2025) and the
--- prior year (2024), read literally as coverage_start on/before 2024-01-01
--- and coverage_end (if any) on/after 2025-12-31.
---
--- Diabetes identification: >= 2 DIABETES condition rows on different dates in
--- 2024 or 2025, OR >= 1 DIABETES-class drug fill in 2024 or 2025.
---
--- Exclusions implemented: any ASCVD condition row on or before 2025-12-31;
--- hospice. SPEC.md gives the ASCVD exclusion an explicit "on or
--- before 2025-12-31" qualifier and lists hospice in the same clause ("any
--- ASCVD condition row on or before 2025-12-31; hospice") without repeating
--- a separate time window, so hospice is implemented with the same
--- on-or-before-2025-12-31 qualifier here. This is a reading of ambiguous
--- wording, not an invented threshold -- documented here and in the README.
---
--- NOT IMPLEMENTED (see README "Not implemented"): the real HEDIS spec also
--- excludes ESRD, cirrhosis, myalgia/myopathy/rhabdomyolysis, pregnancy, IVF,
--- palliative care, and advanced illness with frailty. None of those are
--- modeled in this synthetic dataset and are deliberately left out.
---
--- Rate 2 treatment period differs from Measure 1: it runs from the earliest
--- 2025 statin fill (IPSD) through 2025-12-31 with NO truncation for death or
--- coverage_end -- that's what SPEC.md specifies for this measure.
+-- NOT IMPLEMENTED: ESRD, cirrhosis, myalgia/myopathy/rhabdomyolysis,
+-- pregnancy, IVF, palliative care, advanced illness with frailty -- not
+-- modeled in this synthetic dataset. See README "Not implemented".
 
 CREATE OR REPLACE TABLE measure2_spd AS
 WITH diabetes_dx AS (
@@ -59,6 +34,9 @@ ascvd_excluded AS (
       AND dx_date <= DATE '2025-12-31'
 ),
 hospice_excluded AS (
+    -- Spec gives ASCVD an explicit "on or before 2025-12-31" window and
+    -- lists hospice in the same clause without repeating one -- read here as
+    -- sharing it (ambiguous wording, documented in the README).
     SELECT DISTINCT member_id
     FROM conditions
     WHERE condition_group = 'HOSPICE'
@@ -68,6 +46,8 @@ eligible AS (
     SELECT m.member_id
     FROM members m
     JOIN diabetes_identified di ON di.member_id = m.member_id
+    -- 2025-12-31 is year-end, so age-as-of-anchor is just 2025 minus birth
+    -- year -- no month/day comparison needed.
     WHERE (DATE_PART('year', DATE '2025-12-31') - DATE_PART('year', m.birth_date)) BETWEEN 40 AND 75
       AND m.coverage_start <= DATE '2024-01-01'
       AND (m.coverage_end IS NULL OR m.coverage_end >= DATE '2025-12-31')
@@ -83,10 +63,15 @@ statin_fills_2025 AS (
     GROUP BY pf.member_id
 ),
 rate1 AS (
+    -- Unlike Measure 1, no truncation for death/coverage_end here -- runs to
+    -- 2025-12-31 regardless, per SPEC.md.
     SELECT
         e.member_id,
         sf.statin_ipsd,
-        (sf.member_id IS NOT NULL) AS rate1_numerator
+        (sf.member_id IS NOT NULL) AS rate1_numerator,
+        CASE WHEN sf.member_id IS NOT NULL
+             THEN DATE '2025-12-31' - sf.statin_ipsd + 1
+        END AS days_in_treatment_period
     FROM eligible e
     LEFT JOIN statin_fills_2025 sf ON sf.member_id = e.member_id
 ),
@@ -107,14 +92,13 @@ SELECT
     r.member_id,
     r.rate1_numerator,
     r.statin_ipsd,
-    CASE WHEN r.rate1_numerator THEN (DATE '2025-12-31' - r.statin_ipsd + 1) END
-        AS days_in_treatment_period,
+    r.days_in_treatment_period,
     CASE WHEN r.rate1_numerator THEN COALESCE(c.covered_days, 0) END AS covered_days,
     CASE WHEN r.rate1_numerator
-         THEN COALESCE(c.covered_days, 0)::DOUBLE / (DATE '2025-12-31' - r.statin_ipsd + 1)
+         THEN COALESCE(c.covered_days, 0)::DOUBLE / r.days_in_treatment_period
     END AS pdc,
     CASE WHEN r.rate1_numerator
-         THEN (COALESCE(c.covered_days, 0)::DOUBLE / (DATE '2025-12-31' - r.statin_ipsd + 1)) >= 0.80
+         THEN (COALESCE(c.covered_days, 0)::DOUBLE / r.days_in_treatment_period) >= 0.80
          ELSE FALSE
     END AS rate2_numerator
 FROM rate1 r
