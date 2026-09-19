@@ -1,32 +1,12 @@
--- Grain: defines a reusable table macro, pdc_fill_windows(drug_class, window_start,
--- window_end), rather than producing rows itself. Its output grain (when called) is
--- one row per pharmacy fill for the given drug_class with fill_date in
--- [window_start, window_end]: one row per member_id per fill, carrying that fill's
--- shifted covered_start / covered_end dates.
+-- Grain: table macro pdc_fill_windows(drug_class, window_start, window_end) --
+-- one row per member_id per fill, with that fill's shifted covered_start/
+-- covered_end. Shared PDC logic for both measures (see SPEC.md "Shared: PDC
+-- calculation").
 --
--- This is the core PDC (Proportion of Days Covered) logic shared by both measures.
--- Get it right once, here, instead of re-deriving it per measure.
---
--- Algorithm (see SPEC.md "Shared: PDC calculation"):
---   1. Order a member's fills within a drug class by fill_date.
---   2. Walk fills forward maintaining a running "covered through" date.
---      - If fill_date > covered_through: coverage resumes at fill_date (a gap).
---      - If fill_date <= covered_through (early refill): the new supply is shifted
---        forward to start the day after covered_through. Surplus days push out;
---        they are never double-counted inside an already-covered window.
---   3. covered_through advances by days_supply each fill.
---
--- Because consecutive covered windows never overlap by construction, each fill's
--- window [covered_start, covered_end] is disjoint from every other fill's window
--- for that member/drug_class. That means covered days can be computed downstream
--- by simply summing (covered_end - covered_start + 1) per fill after truncating
--- each window to the treatment period -- no double-counting is possible, and PDC
--- can never exceed 1.00 by construction.
---
--- This requires a genuine running recurrence (each row depends on the previous
--- row's computed value), which is not expressible as a plain SUM() OVER window
--- function. It's implemented here as a recursive CTE, wrapped in a table macro so
--- both measure files can call it with their own drug_class and date window.
+-- Early refills shift forward instead of stacking, so windows never overlap
+-- and PDC can't exceed 1.00 by construction. Needs a recursive CTE rather
+-- than a window function because each row's shift depends on the previous
+-- row's computed covered_end.
 
 CREATE OR REPLACE MACRO pdc_fill_windows(class_name, window_start, window_end) AS TABLE
 WITH RECURSIVE fills_ranked AS (
