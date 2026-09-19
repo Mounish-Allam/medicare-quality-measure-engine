@@ -1,18 +1,9 @@
 """
 Synthetic data generator for the Medicare Quality Measure Engine.
 
-Produces four tables (members, drug_reference, pharmacy_fills, conditions)
-matching the schema in SPEC.md. All data is synthetic -- there is no real
-patient, pharmacy, or diagnosis data anywhere in this repo.
-
-Nine members have hardcoded IDs and deliberately constructed histories so
-their measure results can be predicted and hand-verified (see SPEC.md,
-"Required edge cases in the generator", and docs/hand_verification.md).
-Everyone else is randomly generated with a fixed seed for reproducibility.
-
-This module only builds Python data structures and loads them into DuckDB.
-All measure logic lives in sql/*.sql -- nothing here computes PDC or
-determines adherence.
+Produces four tables matching the schema in SPEC.md. Nine members are
+hardcoded edge cases (see docs/hand_verification.md); the rest are randomly
+generated with a fixed seed. No measure logic lives here -- that's sql/*.sql.
 """
 
 from __future__ import annotations
@@ -26,10 +17,8 @@ PRIOR_YEAR_START = date(2024, 1, 1)
 
 PLAN_ID = "PLN001"
 
-# Small illustrative drug lists. These are NOT NCQA HEDIS value sets (which
-# are licensed and cannot be redistributed) -- just enough generic drug names
-# to exercise DIABETES vs. STATIN classification. Labeled as illustrative in
-# the README.
+# Illustrative drug list, not an NCQA HEDIS value set (licensed, not
+# redistributable here) -- see README.
 DRUG_REFERENCE = [
     ("metformin", "DIABETES"),
     ("glipizide", "DIABETES"),
@@ -44,15 +33,11 @@ DRUG_REFERENCE = [
 DIABETES_DRUGS = [d for d, c in DRUG_REFERENCE if c == "DIABETES"]
 STATIN_DRUGS = [d for d, c in DRUG_REFERENCE if c == "STATIN"]
 
-# Illustrative prescribing shares, loosely reflecting real-world patterns
-# (metformin as dominant first-line therapy, atorvastatin as the most
-# commonly prescribed statin) so drug choice isn't uniformly random.
+# Illustrative prescribing shares (metformin/atorvastatin dominant).
 DIABETES_DRUG_WEIGHTS = [0.55, 0.15, 0.15, 0.15]  # metformin, glipizide, sitagliptin, insulin_glargine
 STATIN_DRUG_WEIGHTS = [0.45, 0.25, 0.20, 0.10]  # atorvastatin, rosuvastatin, simvastatin, pravastatin
 
-# Age bands weighted toward a Medicare-heavy population (this is nominally a
-# Part D + HEDIS population, not a uniform 22-90 spread) while still leaving
-# enough under-65 members to populate SPD's 40-64 band.
+# Age bands weighted toward a Medicare-heavy population.
 AGE_BANDS = [
     (22, 39, 0.08),
     (40, 64, 0.22),
@@ -126,24 +111,18 @@ def build_fixed_members() -> tuple[list[tuple], list[tuple], list[tuple]]:
     def add_member(member_id, birth_date, sex, coverage_start, coverage_end, death_date):
         members.append((member_id, birth_date, sex, coverage_start, coverage_end, death_date, PLAN_ID))
 
-    # M_PERFECT -- clean 30-day fills all year, no gaps, no early refills.
-    # Expect PDC ~= 1.00 on Measure 1.
+    # M_PERFECT: clean 30-day fills all year -- PDC ~1.00.
     add_member("M_PERFECT", date(1958, 5, 10), "M", date(2023, 1, 1), None, None)
     for fdate, ds in fill_series(date(2025, 1, 1), MEASUREMENT_YEAR_END, 30, 30):
         fills.append((fid.next(), "M_PERFECT", "metformin", fdate, ds))
 
-    # M_EARLY -- refills every 20 days with a 30-day supply. Tests the
-    # early-refill shift: surplus days must push forward, never inflate PDC
-    # above 1.00. Expect PDC ~= 1.00, NOT > 1.00.
+    # M_EARLY: 20-day refills of a 30-day supply -- tests the early-refill
+    # shift; PDC ~1.00, never > 1.00.
     add_member("M_EARLY", date(1960, 3, 22), "F", date(2023, 1, 1), None, None)
     for fdate, ds in fill_series(date(2025, 1, 1), MEASUREMENT_YEAR_END, 30, 20):
         fills.append((fid.next(), "M_EARLY", "metformin", fdate, ds))
 
-    # M_GAP60 -- a deliberate ~60-day true gap mid-year. On-time 30-day
-    # fills through early June, then a fill is skipped so the next fill
-    # lands 60 days after coverage would otherwise have run out, then
-    # on-time fills resume through year end. Expect PDC noticeably below
-    # 1.00, in the ~0.80-0.85 range.
+    # M_GAP60: a true ~60-day gap mid-year -- PDC ~0.80-0.85.
     add_member("M_GAP60", date(1962, 11, 2), "M", date(2023, 1, 1), None, None)
     pre_gap = fill_series(date(2025, 1, 1), date(2025, 5, 15), 30, 30)
     for fdate, ds in pre_gap:
@@ -154,27 +133,21 @@ def build_fixed_members() -> tuple[list[tuple], list[tuple], list[tuple]]:
     for fdate, ds in fill_series(resume_date, MEASUREMENT_YEAR_END, 30, 30):
         fills.append((fid.next(), "M_GAP60", "metformin", fdate, ds))
 
-    # M_ONEFILL -- exactly one diabetes fill. Fails the >=2-fills-on-
-    # different-dates denominator test for Measure 1.
+    # M_ONEFILL: only one diabetes fill -- fails the >=2-fills denominator test.
     add_member("M_ONEFILL", date(1965, 7, 19), "F", date(2023, 1, 1), None, None)
     fills.append((fid.next(), "M_ONEFILL", "metformin", date(2025, 6, 1), 30))
 
-    # M_DIED -- dies 2025-08-15. Regular 30-day fills continue on schedule;
-    # some fills' nominal coverage would extend past the death date. The
-    # treatment period must truncate at death_date, not run the supply out.
+    # M_DIED: dies 2025-08-15 -- treatment period must truncate at death_date.
     add_member("M_DIED", date(1955, 2, 14), "M", date(2023, 1, 1), None, date(2025, 8, 15))
     for fdate, ds in fill_series(date(2025, 1, 1), date(2025, 8, 15), 30, 30):
         fills.append((fid.next(), "M_DIED", "metformin", fdate, ds))
 
-    # M_LATEENROLL -- coverage starts 2025-03-01, so the member was not
-    # enrolled at all in 2024. Fails SPD's continuous-enrollment test even
-    # though diabetes identification and everything else would qualify.
+    # M_LATEENROLL: coverage starts 2025-03-01 -- fails SPD continuous enrollment.
     add_member("M_LATEENROLL", date(1970, 9, 9), "F", date(2025, 3, 1), None, None)
     fills.append((fid.next(), "M_LATEENROLL", "metformin", date(2025, 4, 1), 30))
     fills.append((fid.next(), "M_LATEENROLL", "metformin", date(2025, 5, 1), 30))
 
-    # M_ASCVD -- diabetes identification plus an ASCVD diagnosis. Excluded
-    # from SPD regardless of everything else about the member.
+    # M_ASCVD: diabetic with an ASCVD dx -- excluded from SPD.
     add_member("M_ASCVD", date(1968, 1, 30), "M", date(2023, 1, 1), None, None)
     conditions.append(("M_ASCVD", "DIABETES", date(2024, 3, 1)))
     conditions.append(("M_ASCVD", "DIABETES", date(2025, 3, 1)))
@@ -182,9 +155,8 @@ def build_fixed_members() -> tuple[list[tuple], list[tuple], list[tuple]]:
     fills.append((fid.next(), "M_ASCVD", "atorvastatin", date(2025, 5, 1), 30))
     fills.append((fid.next(), "M_ASCVD", "atorvastatin", date(2025, 6, 1), 30))
 
-    # M_SWITCH -- atorvastatin then rosuvastatin mid-year, on a continuous
-    # non-overlapping schedule. The PDC engine partitions by drug_class, not
-    # drug_name, so coverage must carry through the switch with no gap.
+    # M_SWITCH: atorvastatin then rosuvastatin mid-year -- coverage must carry
+    # through the drug-class switch with no gap.
     add_member("M_SWITCH", date(1972, 6, 6), "F", date(2023, 1, 1), None, None)
     conditions.append(("M_SWITCH", "DIABETES", date(2024, 2, 1)))
     conditions.append(("M_SWITCH", "DIABETES", date(2025, 2, 1)))
@@ -198,8 +170,7 @@ def build_fixed_members() -> tuple[list[tuple], list[tuple], list[tuple]]:
     for fdate, ds in fill_series(post_switch_start, MEASUREMENT_YEAR_END, 30, 30):
         fills.append((fid.next(), "M_SWITCH", "rosuvastatin", fdate, ds))
 
-    # M_HOSPICE -- otherwise-qualifying diabetic with a hospice diagnosis in
-    # 2025. Excluded from both Measure 1 and SPD.
+    # M_HOSPICE: qualifying diabetic with a hospice dx -- excluded from both measures.
     add_member("M_HOSPICE", date(1959, 10, 20), "M", date(2023, 1, 1), None, None)
     conditions.append(("M_HOSPICE", "DIABETES", date(2024, 5, 1)))
     conditions.append(("M_HOSPICE", "DIABETES", date(2025, 5, 1)))
@@ -213,7 +184,7 @@ def build_fixed_members() -> tuple[list[tuple], list[tuple], list[tuple]]:
 
 
 def build_random_members(
-    rng: random.Random, count: int, existing_ids: set[str]
+    rng: random.Random, count: int
 ) -> tuple[list[tuple], list[tuple], list[tuple]]:
     members: list[tuple] = []
     fills: list[tuple] = []
@@ -223,19 +194,14 @@ def build_random_members(
     n = 0
     while n < count:
         member_id = f"M{n + 1:04d}"
-        if member_id in existing_ids:
-            n += 1
-            continue
 
         lo, hi, _ = rng.choices(AGE_BANDS, weights=[w for _, _, w in AGE_BANDS])[0]
         age_years = rng.randint(lo, hi)
         birth_date = MEASUREMENT_YEAR_END - timedelta(days=int(age_years * 365.25))
-        # Slight female skew, consistent with longevity-driven sex ratios in
-        # an older population.
+        # Slight female skew, consistent with an older population.
         sex = rng.choices(["F", "M"], weights=[0.53, 0.47])[0]
 
-        # ~85% continuously enrolled since before the prior year, ~10% late
-        # enrollees starting sometime in 2025, ~5% starting mid-prior-year.
+        # ~85% continuously enrolled, ~10% late 2025 enrollees, ~5% mid-2024.
         r = rng.random()
         if r < 0.85:
             coverage_start = date(rng.randint(2018, 2023), rng.randint(1, 12), rng.randint(1, 28))
@@ -256,9 +222,7 @@ def build_random_members(
 
         members.append((member_id, birth_date, sex, coverage_start, coverage_end, death_date, PLAN_ID))
 
-        # A member can't have a pharmacy claim after their coverage ended or
-        # after they died -- bound all fill generation to when they were
-        # actually covered and alive during the measurement year.
+        # Bound fill generation to when the member was covered and alive.
         coverage_effective_end = MEASUREMENT_YEAR_END
         if coverage_end is not None:
             coverage_effective_end = min(coverage_effective_end, coverage_end)
@@ -281,18 +245,13 @@ def build_random_members(
             for d in dx_dates:
                 conditions.append((member_id, "DIABETES", d))
 
-            # Real-world PDC distributions are well documented as bimodal --
-            # most members cluster near either consistently adherent or
-            # consistently non-adherent, with fewer in between -- rather than
-            # a single smooth curve. Mix two beta distributions to reflect
-            # that instead of drawing from one.
+            # Real PDC distributions are bimodal -- mix two beta distributions
+            # instead of drawing from one.
             if rng.random() < 0.65:
                 adherence = rng.betavariate(6, 1.5)  # high-adherence cluster, mean ~0.80
             else:
                 adherence = rng.betavariate(1.5, 4)  # low-adherence cluster, mean ~0.27
-            # 90-day mail-order supply is associated with better adherence in
-            # real pharmacy claims; let the supply mix lean that way for
-            # members who land in the high-adherence cluster.
+            # 90-day supply correlates with better adherence.
             days_supply_choices = [90, 90, 30] if adherence >= 0.6 else [30, 30, 90]
 
             fill_start = date(2025, rng.randint(1, 4), rng.randint(1, 28))
@@ -317,9 +276,7 @@ def build_random_members(
                     ):
                         fills.append((fid.next(), member_id, statin_drug, fdate, ds))
 
-            # Real-world prevalence of ASCVD among diagnosed diabetics is
-            # commonly cited in the 20-32% range; 20% keeps this dataset in
-            # that range without overstating it.
+            # ~20% ASCVD prevalence among diagnosed diabetics.
             if rng.random() < 0.20:
                 conditions.append((member_id, "ASCVD", date(2025, rng.randint(1, 12), rng.randint(1, 28))))
 
@@ -337,10 +294,9 @@ def generate(total_members: int = 500, seed: int = 42) -> dict[str, list[tuple]]
     rng = random.Random(seed)
 
     fixed_members, fixed_fills, fixed_conditions = build_fixed_members()
-    fixed_ids = {m[0] for m in fixed_members}
 
     random_count = total_members - len(fixed_members)
-    rand_members, rand_fills, rand_conditions = build_random_members(rng, random_count, fixed_ids)
+    rand_members, rand_fills, rand_conditions = build_random_members(rng, random_count)
 
     return {
         "drug_reference": list(DRUG_REFERENCE),
