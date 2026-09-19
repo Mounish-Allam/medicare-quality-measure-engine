@@ -1,13 +1,8 @@
--- Grain: one row per member_id per measure, for every member who has a
--- computed PDC value (i.e. Measure 1's denominator, and SPD Rate 2's
--- denominator = SPD Rate 1's numerator). This feeds output/member_detail.csv.
+-- Grain: one row per member_id per measure (Measure 1's denominator, and SPD
+-- Rate 2's denominator = SPD Rate 1's numerator). Feeds output/member_detail.csv.
 --
--- gap_distance = pdc - 0.80: positive means the member cleared the adherence
--- threshold, negative means how far short they fell. Useful for a Tableau
+-- gap_distance = pdc - 0.80 (positive = cleared threshold), for a Tableau
 -- distribution view of how close the population sits to the cut point.
---
--- age and sex are carried through from members (no new dimension table, no
--- new measure) purely so a downstream dashboard can filter/facet by them.
 
 CREATE OR REPLACE TABLE member_detail AS
 SELECT
@@ -51,4 +46,5 @@ FROM (
     FROM measure2_spd
     WHERE rate1_numerator
 ) d
-JOIN members m ON m.member_id = d.member_id;
+JOIN members m ON m.member_id = d.member_id
+ORDER BY d.member_id, d.measure;
