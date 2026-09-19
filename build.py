@@ -32,11 +32,12 @@ SQL_FILES = [
     "05_export_member_detail.sql",
 ]
 
-# Expected outcome for each hand-constructed edge-case member, taken directly
-# from SPEC.md's "Required edge cases in the generator" table. Each check is a
-# (description, predicate) pair evaluated against that member's row in
-# measure1_partd_diabetes / measure2_spd (None if the member isn't present in
-# that table, i.e. excluded from the denominator/population).
+# Floating-point tolerance for the "PDC must never exceed 1.00" invariant.
+PDC_EPSILON = 1.0000001
+
+# Expected outcome per edge-case member, from SPEC.md's edge-case table.
+# Each predicate takes (measure1_row, measure2_row); a row is None if the
+# member isn't in that table (excluded from the denominator/population).
 EDGE_CASE_EXPECTATIONS = {
     "M_PERFECT": [
         ("in Measure 1 denominator", lambda m1, m2: m1 is not None),
@@ -46,7 +47,7 @@ EDGE_CASE_EXPECTATIONS = {
     "M_EARLY": [
         ("in Measure 1 denominator", lambda m1, m2: m1 is not None),
         ("Measure 1 PDC ~= 1.00, never > 1.00",
-         lambda m1, m2: m1 and 0.99 <= m1["pdc"] <= 1.0000001),
+         lambda m1, m2: m1 and 0.99 <= m1["pdc"] <= PDC_EPSILON),
         ("Measure 1 adherent", lambda m1, m2: m1 and m1["adherent"]),
     ],
     "M_GAP60": [
@@ -97,14 +98,14 @@ def run_sql_file(con: duckdb.DuckDBPyConnection, filename: str) -> None:
 def assert_no_pdc_over_one(con: duckdb.DuckDBPyConnection) -> None:
     """A PDC above 1.00 anywhere in the output is a bug -- fail the build."""
     bad = con.execute(
-        """
+        f"""
         SELECT member_id, 'measure1_partd_diabetes' AS source, pdc
         FROM measure1_partd_diabetes
-        WHERE pdc > 1.0000001
+        WHERE pdc > {PDC_EPSILON}
         UNION ALL
         SELECT member_id, 'measure2_spd' AS source, pdc
         FROM measure2_spd
-        WHERE pdc IS NOT NULL AND pdc > 1.0000001
+        WHERE pdc IS NOT NULL AND pdc > {PDC_EPSILON}
         """
     ).fetchall()
     if bad:
